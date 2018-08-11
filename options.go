@@ -12,14 +12,16 @@
 // See the License for the specific language governing permissions and
 
 // Package options is under development, but hopefully won't have too many
-// non-backwards compatible changes.
-// 28 July 2018
+// non-backwards compatible changes.  10 August 2018
 //
 // Package options provides a structured interface for getopt style flag
 // parsing.  It is particularly helpful for parsing an option set more than once
 // and possibly concurrently.  This package was designed to make option
 // specification simpler and more concise.  It is a wrapper around the getopt
 // package github.com/pborman/getopt/v2 package.
+//
+// Package options also provides a facility to specify command line options in a
+// JSON encoded file by using the JSON type (described below).
 //
 // Option Decorations
 //
@@ -240,7 +242,13 @@ func register(i interface{}, set *getopt.Set) error {
 		if o.param == "" {
 			hv = hv[:1]
 		}
-		set.FlagLong(fv.Addr().Interface(), o.long, o.short, hv...)
+		opt := fv.Addr().Interface()
+		if f, ok := opt.(*JSON); ok {
+			f.Sets = append(f.Sets, set)
+			f.opt = set.FlagLong(opt, o.long, o.short, hv...)
+		} else {
+			set.FlagLong(opt, o.long, o.short, hv...)
+		}
 	}
 	return nil
 }
