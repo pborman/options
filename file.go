@@ -25,11 +25,12 @@ import (
 	"github.com/pborman/getopt/v2"
 )
 
-// A JSON is an Option that accepts JSON encoded flags.  If set to a string that
-// starts with "{" then the string is assumed to be a JSON encoded set of
-// values, otherwise the string is the pathname of a file with a JSON encoded
-// set of string.  If the string starts with a ? then the rest of the string is
-// the pathname to load and it is not an error if the file does not exist.
+// A Flags is an getopt.Value that accepts JSON encoded flags.  If set to a
+// string that starts with "{" then the string is assumed to be a JSON encoded
+// set of values, otherwise the string is the pathname of a file with a JSON
+// encoded set of string.  If the string starts with a ? then the rest of the
+// string is the pathname to load and it is not an error if the file does not
+// exist.
 //
 // The value in the JSON encoded data should look something like:
 //
@@ -40,9 +41,9 @@ import (
 //	}
 //
 // This blob is the equivalent of "--name=bob -v -n=42" except the values in the
-// blob will never override an options value that is set on the command line.
+// blob will never override an option value that is set on the command line.
 // The following command lines all set "name" to "bob" assuming --flags is of
-// type JSON:
+// type Flags:
 //
 //	--flags '{"name": "bob"}'
 //	--flags '{"name": "fred"}' --name bob
@@ -51,35 +52,40 @@ import (
 // The options in the getopt.Sets listed will be updated. If the same option
 // name occurs in two sets, the value is only set in the first set.
 //
-// A JSON in an options structure automatically has the options structure set
+// A Flags in an options structure automatically has the options structure set
 // appended.  When registered with getopt.Flag, it is the caller's
 // responsibility to set Sets.
 //
-// To use a JSON with the standard command line set:
+// To use a Flags as a flag in a options structure, include a field of type
+// Flags in the structure, such as:
 //
-//	options.NewJSON("flags")
+//	Flags options.Flags `getopt:"--flags json encoded command line parameters"
+//
+// To use a Flags with the standard command line set:
+//
+//	options.NewFlags("flags")
 //
 // Unless IgnoreUnknown is set, it is an error to pass in a JSON blob that
 // references an unknown option.
-type JSON struct {
+type Flags struct {
 	Sets          []*getopt.Set
 	IgnoreUnknown bool
 	path          string
 	opt           getopt.Option
 }
 
-// NewJSON returns a new JSON registered on the standard CommandLine as a long
+// NewFlags returns a new Flags registered on the standard CommandLine as a long
 // named option.
 //
 // Typical usage:
 //
-//	options.NewJSON("flags")
+//	options.NewFlags("flags")
 //
 // To ignore unknown flag names:
 //
-//	options.NewJSON("flags").IgnoreUnknown = true
-func NewJSON(name string) *JSON {
-	json := &JSON{Sets: []*getopt.Set{getopt.CommandLine}}
+//	options.NewFlags("flags").IgnoreUnknown = true
+func NewFlags(name string) *Flags {
+	json := &Flags{Sets: []*getopt.Set{getopt.CommandLine}}
 	json.opt = getopt.FlagLong(json, name, 0, "json encoded command line parameters")
 	return json
 }
@@ -88,8 +94,8 @@ func NewJSON(name string) *JSON {
 // getopt.Option.  Set is a no-op if value is the empty string.  This can be
 // used to read values from the environment:
 //
-//	options.NewJSON("flags").Set(os.GetEnv("MY_PROGRAM_FLAGS"), nil)
-func (j *JSON) Set(value string, opt getopt.Option) error {
+//	options.NewFlags("flags").Set(os.GetEnv("MY_PROGRAM_FLAGS"), nil)
+func (f *Flags) Set(value string, opt getopt.Option) error {
 	// We trim spaces incase someone says:
 	//	--flags '
 	//		{ "key": "value" }
@@ -99,9 +105,9 @@ func (j *JSON) Set(value string, opt getopt.Option) error {
 		return nil
 	}
 	if opt == nil {
-		opt = j.opt
+		opt = f.opt
 		if opt == nil {
-			return errors.New("options.JSON: not registered as an option")
+			return errors.New("options.Flags: not registered as an option")
 		}
 	} else if !opt.Seen() {
 		return nil
@@ -129,7 +135,7 @@ func (j *JSON) Set(value string, opt getopt.Option) error {
 		}
 	}
 
-	j.path = value
+	f.path = value
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 {
 		return nil
@@ -146,7 +152,7 @@ func (j *JSON) Set(value string, opt getopt.Option) error {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return err
 	}
-	for _, set := range j.Sets {
+	for _, set := range f.Sets {
 		var err error
 		set.VisitAll(func(o getopt.Option) {
 			if err != nil {
@@ -195,7 +201,7 @@ func (j *JSON) Set(value string, opt getopt.Option) error {
 			return err
 		}
 	}
-	if j.IgnoreUnknown || len(m) == 0 {
+	if f.IgnoreUnknown || len(m) == 0 {
 		return nil
 	}
 	names := make([]string, 1, len(m)+1)
@@ -212,6 +218,6 @@ func (j *JSON) Set(value string, opt getopt.Option) error {
 }
 
 // String implements getopt.Value.
-func (j *JSON) String() string {
-	return j.path
+func (f *Flags) String() string {
+	return f.path
 }

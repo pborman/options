@@ -21,7 +21,7 @@
 // package github.com/pborman/getopt/v2 package.
 //
 // Package options also provides a facility to specify command line options in a
-// JSON encoded file by using the JSON type (described below).
+// JSON encoded file by using the Flags type (described below).
 //
 // Option Decorations
 //
@@ -243,7 +243,7 @@ func register(i interface{}, set *getopt.Set) error {
 			hv = hv[:1]
 		}
 		opt := fv.Addr().Interface()
-		if f, ok := opt.(*JSON); ok {
+		if f, ok := opt.(*Flags); ok {
 			f.Sets = append(f.Sets, set)
 			f.opt = set.FlagLong(opt, o.long, o.short, hv...)
 		} else {
