@@ -15,63 +15,86 @@ package options
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pborman/getopt/v2"
 )
 
-// A Flags is an getopt.Value that accepts JSON encoded flags.  If set to a
-// string that starts with "{" then the string is assumed to be a JSON encoded
-// set of values, otherwise the string is the pathname of a file with a JSON
-// encoded set of string.  If the string starts with a ? then the rest of the
-// string is the pathname to load and it is not an error if the file does not
-// exist.
+// A Flags is an getopt.Value that reads initial command line flags from a file
+// named by the flags value.  The flags read from the file are effectively read
+// prior to any other command line flag.  If a flag is set both in a flags file
+// and on the command line directly, the command line value is the value that is
+// used.
 //
-// The value in the JSON encoded data should look something like:
+// It is an error if the specified file does not exist unless the pathname is
+// prefixed with a ? (the ? is stripped), e.g., --flags=?my-flags.
 //
-//	{
-//		"name": "bob",
-//		"v": true,
-//		"n": 42
-//	}
+// The format of the flags file can be specified by either using the
+// SetEncoding method or by using the "encoding" struct Flags field tag.
 //
-// This blob is the equivalent of "--name=bob -v -n=42" except the values in the
-// blob will never override an option value that is set on the command line.
-// The following command lines all set "name" to "bob" assuming --flags is of
-// type Flags:
+// The default file encoding is provided by the SimpleDecoder function
+// (registered as the encoding "simple").  Other file encodings can be specified
+// by either using the SetEncoding or supplying the encoding tag in options
+// structure (see below for more details).
 //
-//	--flags '{"name": "bob"}'
-//	--flags '{"name": "fred"}' --name bob
-//	--name bob --flags '{"name": "fred"}'
+// Consider the file name my-flags:
 //
-// The options in the getopt.Sets listed will be updated. If the same option
-// name occurs in two sets, the value is only set in the first set.
+//	name = bob
+//	v = true
+//	n = 42
 //
-// A Flags in an options structure automatically has the options structure set
-// appended.  When registered with getopt.Flag, it is the caller's
-// responsibility to set Sets.
+// Passing --flags=my-flags is the equivalent of prefacing the command line
+// argumebts with "--name=bob -v -n=42".  Below are are example command lines
+// and the resulting value of name:
 //
-// To use a Flags as a flag in a options structure, include a field of type
-// Flags in the structure, such as:
+//	--flags my-flags                # name is bob
+//	--flags my-flags --name fred    # name is fred
+//	--name fred --flags my-flags    # name is fred
 //
-//	Flags options.Flags `getopt:"--flags json encoded command line parameters"
+// The Sets field specifies the options that the read flags modify.  If the same
+// flag appears in two sets, only the first set is modified.  The default
+// getopt.Set is a single element of either getopt.CommandLine or the getopt.Set
+// passed to RegisterSet or returned by RegisterNew.
 //
-// To use a Flags with the standard command line set:
+// The encoding can be changed from SimpleDecoder, a.k.a. "simple" by either
+// using the SetEncoding method or by specifying the registered encoding as
+// a struct tag to the Flags field in an options structure, e.g.:
 //
-//	options.NewFlags("flags")
+//	Flags options.Flags `getopt:"--flags specify flags file" encoding:"json"`
+//
+// (Importing the package github.com/pborman/options/json registers the json
+// encoding.)
 //
 // Unless IgnoreUnknown is set, it is an error to pass in a JSON blob that
 // references an unknown option.
 type Flags struct {
-	Sets          []*getopt.Set
+	Sets          []Set
 	IgnoreUnknown bool
+	Decoder       FlagsDecoder
 	path          string
 	opt           getopt.Option
+	m             map[string]interface{}
+}
+
+var (
+	decoderMu sync.Mutex
+	decoders  = map[string]FlagsDecoder{"simple": SimpleDecoder}
+)
+
+// A FlagsDecoder the data in bytes as a set of key value pairs.  The values
+// must be type assertable to a strconv.TextMarshaller, a fmt.Stringer, a
+// string, a bool, or one of the non-complex numeric types (e.g., int).
+type FlagsDecoder func([]byte) (map[string]interface{}, error)
+
+func RegisterEncoding(name string, dec FlagsDecoder) {
+	decoderMu.Lock()
+	decoders[name] = dec
+	decoderMu.Unlock()
 }
 
 // NewFlags returns a new Flags registered on the standard CommandLine as a long
@@ -85,23 +108,51 @@ type Flags struct {
 //
 //	options.NewFlags("flags").IgnoreUnknown = true
 func NewFlags(name string) *Flags {
-	json := &Flags{Sets: []*getopt.Set{getopt.CommandLine}}
-	json.opt = getopt.FlagLong(json, name, 0, "json encoded command line parameters")
-	return json
+	flags := &Flags{
+		Sets:    []Set{{Set: getopt.CommandLine}},
+		Decoder: SimpleDecoder,
+	}
+	flags.opt = getopt.FlagLong(flags, name, 0, "file containing command line parameters")
+	return flags
 }
+
+// A Set is a named getopt.Set.
+type Set struct {
+	Name string
+	*getopt.Set
+}
+
+// SetEncoding returns f after setting the decoding function to decoder.
+// For example:
+//
+//	flags := options.NewFlags("flags").SetEncoding(json.Decoder)
+func (f *Flags) SetEncoding(decoder FlagsDecoder) *Flags {
+	f.Decoder = decoder
+	return f
+}
+
+// rescanFlags is the magic path name passed to set to cause it to
+// re-scan options but not read a file.
+var rescanFlags = string("\000\000\000")
 
 // Set implements getopt.Value.  Set can be called directly by passing a nil
 // getopt.Option.  Set is a no-op if value is the empty string.  This can be
 // used to read values from the environment:
 //
-//	options.NewFlags("flags").Set(os.GetEnv("MY_PROGRAM_FLAGS"), nil)
+//	var myOptions struct {
+//		...
+//		Flags options.Flags `getopt:"--flags specify flags file"`
+//	}{}
+//	func init() {
+//		options.Register(&myOptions)
+//		options.Flags.Set("?"+os.GetEnv("MY_PROGRAM_FLAGS"), nil)
+//	}
+//
+// or
+//
+//	options.NewFlags("flags").Set("?"+os.GetEnv("MY_PROGRAM_FLAGS"), nil)
 func (f *Flags) Set(value string, opt getopt.Option) error {
-	// We trim spaces incase someone says:
-	//	--flags '
-	//		{ "key": "value" }
-	//	'
-	value = strings.TrimSpace(value)
-	if value == "" {
+	if value == "" || value == "?" {
 		return nil
 	}
 	if opt == nil {
@@ -112,48 +163,65 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 	} else if !opt.Seen() {
 		return nil
 	}
-	var err error
-	var data []byte
 
-	// If the value starts with '{' assume it is a json blob.
-	// Otheriwse it is a path name.
-	// close the } above
+	if value == rescanFlags {
+		value = f.path
+	} else {
+		var data []byte
+		var err error
 
-	switch value[0] {
-	case '{': // }
-		data = []byte(value)
-	case '?':
-		value = value[1:]
-		data, err = ioutil.ReadFile(value)
-		if err != nil {
+		switch value[0] {
+		case '?': // okay for the file
+			value = value[1:]
+			data, err = ioutil.ReadFile(value)
+			if err != nil {
+				return nil
+			}
+		default: // filename
+			data, err = ioutil.ReadFile(value)
+			if err != nil {
+				return err
+			}
+		}
+
+		f.path = value
+		data = bytes.TrimSpace(data)
+		if len(data) == 0 {
 			return nil
 		}
-	default:
-		data, err = ioutil.ReadFile(value)
+
+		// We may get set multiple times, for example, a defaults file
+		// and then a file specified by --flags.  We might also have a
+		// map that contains subsets of flags that we don't know about
+		// yet.  By keeping the merged list of options that we have seen
+		// we can re-play after the subset is registered.
+		m, err := f.Decoder(data)
 		if err != nil {
 			return err
 		}
+		f.m = mergemap(f.m, m)
 	}
 
-	f.path = value
-	data = bytes.TrimSpace(data)
-	if len(data) == 0 {
-		return nil
-	}
-	m := map[string]interface{}{}
-	decoder := json.NewDecoder(bytes.NewBuffer(data))
-	decoder.UseNumber()
-	for decoder.More() {
-		if err := decoder.Decode(&m); err != nil {
-			return err
-		}
-	}
+	// Now make a duplicate to work with.
+	m := mergemap(nil, f.m)
 
-	if err := json.Unmarshal(data, &m); err != nil {
-		return err
-	}
+	// matched is the names of subsets that we found
+	matched := map[string]bool{}
 	for _, set := range f.Sets {
 		var err error
+		// So we don't forget the original map
+		m := m
+		matched[set.Name] = true
+		if set.Name != "" {
+			switch sm := m[set.Name].(type) {
+			case nil:
+				continue
+			case map[string]interface{}:
+				m = sm
+			default:
+				continue
+			}
+		}
 		set.VisitAll(func(o getopt.Option) {
 			if err != nil {
 				return
@@ -175,11 +243,28 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 			}
 			delete(m, n)
 
+			type Stringer interface {
+				String() string
+			}
+			type TextMarshaler interface {
+				MarshalText() (text []byte, err error)
+			}
+
 			var s string
 			switch v := v.(type) {
+			case TextMarshaler:
+				data, err := v.MarshalText()
+				if err != nil {
+					return
+				}
+				s = string(data)
+			case Stringer:
+				s = v.String()
 			case string:
 				s = v
-			case float64:
+			case float64, float32,
+				int, int64, int32, int16, int8,
+				uint, uint64, uint32, uint16, uint8:
 				s = fmt.Sprintf("%v", v)
 			case bool:
 				if v {
@@ -201,23 +286,63 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 			return err
 		}
 	}
-	if f.IgnoreUnknown || len(m) == 0 {
+
+	if f.IgnoreUnknown {
 		return nil
 	}
+
+	// Determine if there are any unknown global flags or flags for this
+	// particular sub-command.  We ignore all other sets of flags.
 	names := make([]string, 1, len(m)+1)
-	if value[0] == '{' { // }
-		names[0] = "unknown flags:"
-	} else {
-		names[0] = value + ": unknown flags:"
+	names[0] = fmt.Sprintf("%s: unrecognized flags:", value)
+	for k, v := range m {
+		if !matched[k] {
+			continue
+		}
+		sm, ok := v.(map[string]interface{})
+		if !ok {
+			names = append(names, "--"+k)
+			continue
+		}
+		for sk := range sm {
+			names = append(names, "--"+k+"."+sk)
+		}
 	}
-	for k := range m {
-		names = append(names, "--"+k)
+	if len(names) == 1 {
+		return nil
 	}
 	sort.Strings(names[1:])
 	return errors.New(strings.Join(names, "\n    "))
 }
 
+// Rescan sets values in set from the values previously set in f.
+func (f *Flags) Rescan(name string, set *getopt.Set) error {
+	osets := f.Sets
+	defer func() { f.Sets = osets }()
+	f.Sets = []Set{{
+		Name: name,
+		Set:  set,
+	}}
+	return f.Set(rescanFlags, nil)
+
+}
+
 // String implements getopt.Value.
 func (f *Flags) String() string {
 	return f.path
+}
+
+// Merge map merges the entries in old into new and returns new.  If new is
+// nil then a new map is created.
+func mergemap(new, old map[string]interface{}) map[string]interface{} {
+	if new == nil {
+		new = map[string]interface{}{}
+	}
+	for k, v := range old {
+		if vm, ok := v.(map[string]interface{}); ok {
+			v = mergemap(nil, vm)
+		}
+		new[k] = v
+	}
+	return new
 }

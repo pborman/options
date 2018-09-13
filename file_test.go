@@ -17,12 +17,18 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"pkg/prb/uuid"
 	"reflect"
 	"testing"
 	"time"
 
 	getopt "github.com/pborman/getopt/v2"
 )
+
+func mkFile(data string) (string, error) {
+	tmpfile := fmt.Sprintf("%s/options_test.%s", os.TempDir(), uuid.New())
+	return tmpfile, ioutil.WriteFile(tmpfile, []byte(data), 0644)
+}
 
 func TestFlags(t *testing.T) {
 	type options struct {
@@ -42,13 +48,13 @@ func TestFlags(t *testing.T) {
 	}{
 		{
 			name: "all",
-			flags: `{
-				"string": "hello",
-				"int": 42,
-				"bool": true,
-				"float": 4.2,
-				"duration": "17s"
-			}`,
+			flags: `
+				string = hello
+				int = 42
+				bool = true
+				float = 4.2
+				duration = 17s
+			`,
 			want: &options{
 				String:   "hello",
 				Int:      42,
@@ -59,13 +65,13 @@ func TestFlags(t *testing.T) {
 		},
 		{
 			name: "no-override-before",
-			flags: `{
-				"string": "hello",
-				"int": 42,
-				"bool": false,
-				"float": 4.2,
-				"duration": "17s"
-			}`,
+			flags: `
+				string = hello
+				int = 42
+				bool = false
+				float = 4.2
+				duration = 17s
+			`,
 			args: []string{
 				"--string=bob",
 				"--int=17",
@@ -84,13 +90,13 @@ func TestFlags(t *testing.T) {
 		},
 		{
 			name: "no-override-after",
-			flags: `{
-				"string": "hello",
-				"int": 42,
-				"bool": false,
-				"float": 4.2,
-				"duration": "17s"
-			}`,
+			flags: `
+				string = hello
+				int = 42
+				bool = false
+				float = 4.2
+				duration = 17s
+			`,
 			args: []string{
 				"--flags", "FLAGS",
 				"--string=bob",
@@ -111,23 +117,29 @@ func TestFlags(t *testing.T) {
 		if tt.opts == nil {
 			tt.opts = &options{}
 		}
-		vopts, set := RegisterNew(tt.opts)
+		vopts, set := RegisterNew("", tt.opts)
 		opts := vopts.(*options)
-		found := false
-		for i, a := range tt.args {
-			if a == "FLAGS" {
-				found = true
-				tt.args[i] = tt.flags
-			}
-		}
-		if !found {
-			tt.args = append(tt.args, "--flags", tt.flags)
-		}
 		t.Run(tt.name, func(t *testing.T) {
-			err := set.Getopt(append([]string{"test"}, tt.args...), nil)
+			tmpfile, err := mkFile(tt.flags)
+			defer os.Remove(tmpfile)
 			if err != nil {
 				t.Fatal(err)
 			}
+			found := false
+			for i, a := range tt.args {
+				if a == "FLAGS" {
+					found = true
+					tt.args[i] = tmpfile
+				}
+			}
+			if !found {
+				tt.args = append(tt.args, "--flags", tmpfile)
+			}
+			err = set.Getopt(append([]string{"test"}, tt.args...), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			opts.Flags.Decoder = nil
 			tt.want.Flags = opts.Flags
 			if !reflect.DeepEqual(tt.want, opts) {
 				t.Errorf("Got :\n%+v\nWant:\n%+v", opts, tt.want)
@@ -139,12 +151,19 @@ func TestFlags(t *testing.T) {
 func TestFlagsCommandLine(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	flags := &Flags{
-		Sets: []*getopt.Set{getopt.CommandLine},
+		Sets:    []Set{{Set:getopt.CommandLine}},
+		Decoder: SimpleDecoder,
 	}
+	tmpfile, err := mkFile(`name=bob`)
+	defer os.Remove(tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	var name string
 	getopt.FlagLong(flags, "flags", 0)
 	getopt.FlagLong(&name, "name", 'n')
-	err := getopt.CommandLine.Getopt([]string{"test", "--flags", `{"name":"bob"}`}, nil)
+	err = getopt.CommandLine.Getopt([]string{"test", "--flags", tmpfile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,12 +175,18 @@ func TestFlagsCommandLine(t *testing.T) {
 func TestFlagsShortName(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	flags := &Flags{
-		Sets: []*getopt.Set{getopt.CommandLine},
+		Sets:    []Set{{Set:getopt.CommandLine}},
+		Decoder: SimpleDecoder,
+	}
+	tmpfile, err := mkFile(`n=bob`)
+	defer os.Remove(tmpfile)
+	if err != nil {
+		t.Fatal(err)
 	}
 	var name string
 	getopt.FlagLong(flags, "flags", 0)
 	getopt.FlagLong(&name, "name", 'n')
-	err := getopt.CommandLine.Getopt([]string{"test", "--flags", `{"n":"bob"}`}, nil)
+	err = getopt.CommandLine.Getopt([]string{"test", "--flags", tmpfile}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +198,12 @@ func TestFlagsShortName(t *testing.T) {
 func TestFlagsIgnoreField(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	NewFlags("flags").IgnoreUnknown = true
-	err := getopt.CommandLine.Getopt([]string{"test", "--flags", `{"name":"bob"}`}, nil)
+	tmpfile, err := mkFile(`name=bob`)
+	defer os.Remove(tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = getopt.CommandLine.Getopt([]string{"test", "--flags", tmpfile}, nil)
 	if err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -182,7 +212,12 @@ func TestFlagsIgnoreField(t *testing.T) {
 func TestFlagsBadField(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	NewFlags("flags")
-	err := getopt.CommandLine.Getopt([]string{"test", "--flags", `{"name":"bob"}`}, nil)
+	tmpfile, err := mkFile(`name=bob`)
+	defer os.Remove(tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = getopt.CommandLine.Getopt([]string{"test", "--flags", tmpfile}, nil)
 	if err == nil {
 		t.Errorf("did not get error for unknown flags")
 	}
@@ -192,7 +227,12 @@ func TestFlagsSet(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	name := "fred"
 	getopt.FlagLong(&name, "name", 'n')
-	NewFlags("flags").Set(`{"name":"bob"}`, nil)
+	tmpfile, err := mkFile(`name=bob`)
+	defer os.Remove(tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	NewFlags("flags").Set(tmpfile, nil)
 	if name != "bob" {
 		t.Errorf("Got name %q, want %q", name, "bob")
 	}
@@ -209,17 +249,29 @@ func TestMissingFile(t *testing.T) {
 	}
 }
 
-func TestFromFile(t *testing.T) {
-	tmpfile := fmt.Sprintf("%s/options_test.%d", os.TempDir(), os.Getpid())
-	defer os.Remove(tmpfile)
-	if err := ioutil.WriteFile(tmpfile, []byte(`{"name":"bob"}`), 0644); err != nil {
-		t.Fatal(err)
-	}
+func TestTwoSets(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	name := "fred"
 	getopt.FlagLong(&name, "name", 'n')
-	NewFlags("flags").Set(tmpfile, nil)
+	tmpfile, err := mkFile(`
+name=bob
+child.name=jim
+`)
+	name2 := "john"
+	s2 := getopt.New()
+	s2.FlagLong(&name2, "name", 'n')
+
+	defer os.Remove(tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := NewFlags("flags")
+	f.Sets = append(f.Sets, Set{Name: "child", Set: s2})
+	f.Set(tmpfile, nil)
 	if name != "bob" {
 		t.Errorf("Got name %q, want %q", name, "bob")
+	}
+	if name2 != "jim" {
+		t.Errorf("Got child.name %q, want %q", name2, "jim")
 	}
 }

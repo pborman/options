@@ -162,7 +162,7 @@ func Dup(i interface{}) interface{} {
 // Register registers the fields in i with the standard command-line option set.
 // It panics for the same reasons that RegisterSet panics.
 func Register(i interface{}) {
-	if err := register(i, getopt.CommandLine); err != nil {
+	if err := register("", i, getopt.CommandLine); err != nil {
 		panic(err)
 	}
 }
@@ -173,16 +173,17 @@ func Register(i interface{}) {
 // will not panic.  Validate is typically called by an init function on
 // structures that will be registered later.
 func Validate(i interface{}) error {
-	return register(i, getopt.New())
+	set := getopt.New()
+	return register("", i, set)
 }
 
 // RegisterNew creates a new getopt Set, duplicates i, calls RegisterSet, and
 // then returns them.  RegisterNew should be used when the options in i might be
 // parsed multiple times, requiring a new instance of i each time.
-func RegisterNew(i interface{}) (interface{}, *getopt.Set) {
+func RegisterNew(name string, i interface{}) (interface{}, *getopt.Set) {
 	set := getopt.New()
 	i = Dup(i)
-	if err := register(i, set); err != nil {
+	if err := register(name, i, set); err != nil {
 		panic(err)
 	}
 	return i, set
@@ -193,15 +194,18 @@ func RegisterNew(i interface{}) (interface{}, *getopt.Set) {
 // or contains a field of an unsupported option type.  RegisterSet ignores
 // non-exported fields or fields whose getopt tag is "-".
 //
+// If a Flags field is encountered, name is the name used to identify the set
+// when parsing options.
+//
 // If set is nil, i is validated but no options are set.
 //
 // See the package documentation for a description of the structure to pass to
 // RegisterSet.
-func RegisterSet(i interface{}, set *getopt.Set) error {
-	return register(i, set)
+func RegisterSet(name string, i interface{}, set *getopt.Set) error {
+	return register(name, i, set)
 }
 
-func register(i interface{}, set *getopt.Set) error {
+func register(name string, i interface{}, set *getopt.Set) error {
 	v := reflect.ValueOf(i)
 	if v.Kind() != reflect.Ptr {
 		return fmt.Errorf("%T is not a pointer to a struct", i)
@@ -228,9 +232,9 @@ func register(i interface{}, set *getopt.Set) error {
 			n := strings.ToLower(field.Name)
 			for x, r := range n {
 				if x == 0 {
-					o = &optTag{short : r}
+					o = &optTag{short: r}
 				} else {
-					o = &optTag{long : n}
+					o = &optTag{long: n}
 					break
 				}
 			}
@@ -244,8 +248,19 @@ func register(i interface{}, set *getopt.Set) error {
 		}
 		opt := fv.Addr().Interface()
 		if f, ok := opt.(*Flags); ok {
-			f.Sets = append(f.Sets, set)
+			f.Sets = append(f.Sets, Set{Name: name, Set: set})
 			f.opt = set.FlagLong(opt, o.long, o.short, hv...)
+			tag := field.Tag.Get("encoding")
+			if tag == "" {
+				tag = "simple"
+			}
+			decoderMu.Lock()
+			decoder, ok := decoders[tag]
+			decoderMu.Unlock()
+			if !ok {
+				return fmt.Errorf("unknown flags decoding type: %q", tag)
+			}
+			f.Decoder = decoder
 		} else {
 			set.FlagLong(opt, o.long, o.short, hv...)
 		}
@@ -295,9 +310,9 @@ func Lookup(i interface{}, option string) interface{} {
 			n := strings.ToLower(field.Name)
 			for x, r := range n {
 				if x == 0 {
-					o = &optTag{short : r}
+					o = &optTag{short: r}
 				} else {
-					o = &optTag{long : n}
+					o = &optTag{long: n}
 					break
 				}
 			}
@@ -321,13 +336,13 @@ func (o *optTag) String() string {
 	parts := make([]string, 0, 6)
 	parts = append(parts, "{")
 	if o.long != "" {
-		parts = append(parts, "--" + o.long)
+		parts = append(parts, "--"+o.long)
 	}
 	if o.short != 0 {
-		parts = append(parts, "-" + string(o.short))
+		parts = append(parts, "-"+string(o.short))
 	}
 	if o.param != "" {
-		parts = append(parts, "=" + o.param)
+		parts = append(parts, "="+o.param)
 	}
 	if o.help != "" {
 		parts = append(parts, fmt.Sprintf("%q", o.help))

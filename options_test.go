@@ -64,7 +64,7 @@ func TestLookup(t *testing.T) {
 
 func TestHelp(t *testing.T) {
 	getopt.HelpColumn = 25
-	opts, s := RegisterNew(&myOptions)
+	opts, s := RegisterNew("", &myOptions)
 	if dopts, ok := opts.(*theOptions); !ok {
 		t.Errorf("RegisterNew returned type %T, want %T", dopts, opts)
 	}
@@ -83,7 +83,7 @@ func TestRegisterSet(t *testing.T) {
 		Name: "bob",
 	}
 	s := getopt.New()
-	RegisterSet(opts, s)
+	RegisterSet("", opts, s)
 	s.VisitAll(func(o getopt.Option) {
 		if o.Name() != "--the_name" {
 			t.Errorf("unexpected option found: %q", o.Name())
