@@ -167,6 +167,15 @@ func Register(i interface{}) {
 	}
 }
 
+// RegisterAndParse and calls Register(i) and then getopt.Parse().
+func RegisterAndParse(i interface{}) {
+	Register(i)
+	getopt.Parse()
+}
+
+// Parse simply calls getopt.Parse from the correct version of the getopt package.
+func Parse() { getopt.Parse() }
+
 // Validate validates i as a set of options or returns an error
 //
 // Use Validate to assure that a later call to one of the Register functions
