@@ -40,7 +40,7 @@ var myOptions = theOptions{
 // you must change this string.  Note that getopt.HelpColumn must be set to 25.
 var theHelp = `
 Usage: program [-v] [-c COUNT] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
- -c, --count=COUNT    number of widgets
+ -c, --count=COUNT    number of widgets [42]
      --lazy=value     unspecified
  -n NUMBER            set n to NUMBER
      --name=NAME      name of the widget

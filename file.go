@@ -296,9 +296,10 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 	names := make([]string, 1, len(m)+1)
 	names[0] = fmt.Sprintf("%s: unrecognized flags:", value)
 	for k, v := range m {
-		if !matched[k] {
-			continue
-		}
+		// TODO(borman): are we handling suboptions correctly here?
+		// if !matched[k] {
+		// 	continue
+		// }
 		sm, ok := v.(map[string]interface{})
 		if !ok {
 			names = append(names, "--"+k)

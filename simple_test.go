@@ -40,50 +40,50 @@ func TestSimpleDecoder(t *testing.T) {
 	}{
 		{
 			name: `empty`,
-			m: map[string]interface{}{},
+			m:    map[string]interface{}{},
 		},
 		{
 			in: `# comment`,
-			m: map[string]interface{}{},
+			m:  map[string]interface{}{},
 		},
 		{
 			in: `name=value`,
-			m: map[string]interface{}{`name`: `value`},
+			m:  map[string]interface{}{`name`: `value`},
 		},
 		{
 			in: `name = value`,
-			m: map[string]interface{}{`name`: `value`},
+			m:  map[string]interface{}{`name`: `value`},
 		},
 		{
 			in: ` name = value `,
-			m: map[string]interface{}{`name`: `value`},
+			m:  map[string]interface{}{`name`: `value`},
 		},
 		{
 			in: `name = "value"`,
-			m: map[string]interface{}{`name`: `value`},
+			m:  map[string]interface{}{`name`: `value`},
 		},
 		{
 			in: `name = "value "`,
-			m: map[string]interface{}{`name`: `value `},
+			m:  map[string]interface{}{`name`: `value `},
 		},
 		{
 			in: `name=value #comment`,
-			m: map[string]interface{}{`name`: `value`},
+			m:  map[string]interface{}{`name`: `value`},
 		},
 		{
 			name: "missing value",
-			in: `name`,
-			err: `missing value: "name"`,
+			in:   `name`,
+			err:  `missing value: "name"`,
 		},
 		{
 			name: "space in name",
-			in: `a name = a value`,
-			err: `space in name: "a name = a value"`,
+			in:   `a name = a value`,
+			err:  `space in name: "a name = a value"`,
 		},
 		{
 			name: "missing name",
-			in: `=value`,
-			err: `missing name: "=value"`,
+			in:   `=value`,
+			err:  `missing name: "=value"`,
 		},
 		{
 			name: "complex",
@@ -100,7 +100,9 @@ key3 = "value #" # the comment wasn't escaped
 			},
 		},
 	} {
-		if tt.name == "" { tt.name = tt.in }
+		if tt.name == "" {
+			tt.name = tt.in
+		}
 		t.Run(tt.name, func(t *testing.T) {
 			m, err := SimpleDecoder([]byte(tt.in))
 			switch {

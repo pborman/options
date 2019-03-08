@@ -17,11 +17,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"pkg/prb/uuid"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	getopt "github.com/pborman/getopt/v2"
 )
 
@@ -151,7 +151,7 @@ func TestFlags(t *testing.T) {
 func TestFlagsCommandLine(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	flags := &Flags{
-		Sets:    []Set{{Set:getopt.CommandLine}},
+		Sets:    []Set{{Set: getopt.CommandLine}},
 		Decoder: SimpleDecoder,
 	}
 	tmpfile, err := mkFile(`name=bob`)
@@ -175,7 +175,7 @@ func TestFlagsCommandLine(t *testing.T) {
 func TestFlagsShortName(t *testing.T) {
 	getopt.CommandLine = getopt.New()
 	flags := &Flags{
-		Sets:    []Set{{Set:getopt.CommandLine}},
+		Sets:    []Set{{Set: getopt.CommandLine}},
 		Decoder: SimpleDecoder,
 	}
 	tmpfile, err := mkFile(`n=bob`)
