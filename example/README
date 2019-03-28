@@ -1,0 +1,9 @@
+This is a simple example program showing the use of the options package.
+
+To see the use of setting default values from a file, try using
+
+	--flags=flags.defauilt
+	--json=flags.json
+
+The first demonstrates using the "simple" file format.  The second demonstrats
+using a JSON file.

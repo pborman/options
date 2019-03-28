@@ -1,4 +1,4 @@
-// Copyright 2018 Paul Borman
+// Copyright 2019 Paul Borman
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,17 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 
-// Package options is under development, but hopefully won't have too many
-// non-backwards compatible changes.  10 August 2018
-//
 // Package options provides a structured interface for getopt style flag
 // parsing.  It is particularly helpful for parsing an option set more than once
 // and possibly concurrently.  This package was designed to make option
-// specification simpler and more concise.  It is a wrapper around the getopt
-// package github.com/pborman/getopt/v2 package.
+// specification simpler and more concise.  It is a wrapper around the
+// github.com/pborman/getopt/v2 package.
 //
 // Package options also provides a facility to specify command line options in a
-// JSON encoded file by using the Flags type (described below).
+// text file by using the Flags type (described below).
 //
 // Option Decorations
 //
@@ -68,10 +65,12 @@
 //
 // Example Structure
 //
-// The following structure declares 6 options and sets the default value of
-// Count to be 42:
+// The following structure declares 7 options and sets the default value of
+// Count to be 42.  The --flags option is used to read option values from
+// a file.
 //
 //  type theOptions struct {
+//      Flags   options.Flags `getopt:"--flags=PATH     read defaults from path"`
 //      Name    string        `getopt:"--name=NAME      name of the widget"`
 //      Count   int           `getopt:"--count -c=COUNT number of widgets"`
 //      Verbose bool          `getopt:"-v               be verbose"`
@@ -85,8 +84,9 @@
 //
 // The help message generated from theOptions is:
 //
-//    Usage:  [-v] [-c COUNT] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
+//    Usage:  [-v] [-c COUNT] [--flags PATH] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
 //     -c, --count=COUNT    number of widgets
+//         --flags=PATH     read defaults from PATH
 //         --lazy=value     unspecified
 //     -n NUMBER            set n to NUMBER
 //         --name=NAME      name of the widget
@@ -96,6 +96,10 @@
 // Usage
 //
 // The following are various ways to use the above declaration.
+//
+//	// Register myOptions, parse the command line, and set args to the
+//	// remaining command line parameters
+//	args := options.RegisterAndParse(&myOptions)
 //
 //	// Validate myOptions.
 //	err := options.Validate(&myOptions)
@@ -167,7 +171,8 @@ func Register(i interface{}) {
 	}
 }
 
-// RegisterAndParse and calls Register(i), getopt.Parse(), and returns getopt.Args().
+// RegisterAndParse and calls Register(i), getopt.Parse(), and returns
+// getopt.Args().
 func RegisterAndParse(i interface{}) []string {
 	Register(i)
 	getopt.Parse()
@@ -180,7 +185,7 @@ func Parse() []string {
 	return getopt.Args()
 }
 
-// Validate validates i as a set of options or returns an error
+// Validate validates i as a set of options or returns an error.
 //
 // Use Validate to assure that a later call to one of the Register functions
 // will not panic.  Validate is typically called by an init function on
@@ -192,7 +197,7 @@ func Validate(i interface{}) error {
 
 // RegisterNew creates a new getopt Set, duplicates i, calls RegisterSet, and
 // then returns them.  RegisterNew should be used when the options in i might be
-// parsed multiple times, requiring a new instance of i each time.
+// parsed multiple times requiring a new instance of i each time.
 func RegisterNew(name string, i interface{}) (interface{}, *getopt.Set) {
 	set := getopt.New()
 	i = Dup(i)
@@ -209,8 +214,6 @@ func RegisterNew(name string, i interface{}) (interface{}, *getopt.Set) {
 //
 // If a Flags field is encountered, name is the name used to identify the set
 // when parsing options.
-//
-// If set is nil, i is validated but no options are set.
 //
 // See the package documentation for a description of the structure to pass to
 // RegisterSet.
@@ -295,7 +298,7 @@ func register(name string, i interface{}, set *getopt.Set) error {
 //		Verbose bool `getopt:"--verbose -v be verbose"`
 //	})
 //	set.Getopt(args, nil)
-//	v := options.Lookup(i, "verbose").(string)
+//	v := options.Lookup(i, "verbose").(bool)
 func Lookup(i interface{}, option string) interface{} {
 	v := reflect.ValueOf(i)
 	if v.Kind() != reflect.Ptr {

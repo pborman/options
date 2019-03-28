@@ -275,3 +275,48 @@ child.name=jim
 		t.Errorf("Got child.name %q, want %q", name2, "jim")
 	}
 }
+
+func TestExpand(t *testing.T) {
+	os.Setenv("V1", "value1")
+	os.Setenv("V2", "value2")
+	os.Setenv("V3", "")
+	for _, tt := range []struct {
+		in  string
+		out string
+	}{
+		{"", ""},
+		{"abc", "abc"},
+
+		{"$", "$"},
+		{"$abc", "$abc"},
+		{"${", "${"},
+		{"${$", "${"},
+		{"${abc", "${abc"},
+		{"${$abc", "${abc"},
+		{"${${abc", "${{abc"},
+		{"${$$abc", "${$abc"},
+
+		{"xyz$", "xyz$"},
+		{"xyz${", "xyz${"},
+		{"xyz${$", "xyz${"},
+		{"xyz${abc", "xyz${abc"},
+		{"xyz${$abc", "xyz${abc"},
+		{"xyz${${abc", "xyz${{abc"},
+		{"xyz${$$abc", "xyz${$abc"},
+		{"xyz$abc", "xyz$abc"},
+
+		{"${V1}", "value1"},
+		{"${V2}", "value2"},
+		{"${V3}", ""},
+		{"${V1:-missing}", "value1"},
+		{"${V3:-missing}", "missing"},
+		{"${:-missing}", "missing"},
+		{"${:-${}", "${"},
+		{"${V1}${V2}${V3}", "value1value2"},
+	} {
+		out := expand(tt.in)
+		if out != tt.out {
+			t.Errorf("Expand(%q) got %q, want %q", tt.in, out, tt.out)
+		}
+	}
+}

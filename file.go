@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -136,8 +137,12 @@ func (f *Flags) SetEncoding(decoder FlagsDecoder) *Flags {
 var rescanFlags = string("\000\000\000")
 
 // Set implements getopt.Value.  Set can be called directly by passing a nil
-// getopt.Option.  Set is a no-op if value is the empty string.  This can be
-// used to read values from the environment:
+// getopt.Option.  Set is a no-op if value is the empty string.  Set does
+// simple environment variable expansion on value.
+//
+// The expansion forms ${NAME} and ${NAME:-VALUE} are supported.  In the latter
+// case VALUE will be used if NAME is not found or set to the empty string.
+// Use "${$" to represent a literal "${".
 //
 //	var myOptions struct {
 //		...
@@ -145,13 +150,14 @@ var rescanFlags = string("\000\000\000")
 //	}{}
 //	func init() {
 //		options.Register(&myOptions)
-//		options.Flags.Set("?"+os.GetEnv("MY_PROGRAM_FLAGS"), nil)
+//		options.Flags.Set("?${HOME}/.my.flags", nil)
 //	}
 //
 // or
 //
-//	options.NewFlags("flags").Set("?"+os.GetEnv("MY_PROGRAM_FLAGS"), nil)
+//	options.NewFlags("flags").Set("?${HOME}/.my.flags", nil)
 func (f *Flags) Set(value string, opt getopt.Option) error {
+	value = expand(value)
 	if value == "" || value == "?" {
 		return nil
 	}
@@ -333,7 +339,7 @@ func (f *Flags) String() string {
 	return f.path
 }
 
-// Merge map merges the entries in old into new and returns new.  If new is
+// mergemap merges the entries in old into new and returns new.  If new is
 // nil then a new map is created.
 func mergemap(new, old map[string]interface{}) map[string]interface{} {
 	if new == nil {
@@ -346,4 +352,40 @@ func mergemap(new, old map[string]interface{}) map[string]interface{} {
 		new[k] = v
 	}
 	return new
+}
+
+// expand does simple ${VALUE} variable expansion on s and returns the result.
+// It supports ${NAME} and ${NAME:-VALUE}.  If VALUE is provided then it is used
+// if NAME is either empty or not set.  User "${$" to represent a literal "${".
+func expand(s string) string {
+	var parts []string
+	for {
+		x := strings.Index(s, "${") // }
+		if x < 0 || x+2 == len(s) {
+			return strings.Join(append(parts, s), "")
+		}
+		if s[x+2] == '$' {
+			parts = append(parts, s[:x+2])
+			s = s[x+3:]
+			continue
+		}
+		parts = append(parts, s[:x])
+		s = s[x+2:]
+		// {
+		x = strings.Index(s, "}")
+		if x < 0 {
+			return strings.Join(append(parts, "${", s), "") // }
+		}
+		var name, value string
+		name = s[:x]
+		s = s[x+1:]
+		if x := strings.Index(name, ":-"); x >= 0 {
+			value = name[x+2:]
+			name = name[:x]
+		}
+		if env := os.Getenv(name); env != "" {
+			value = env
+		}
+		parts = append(parts, value)
+	}
 }
