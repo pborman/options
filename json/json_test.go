@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"pkg/prb/uuid"
 	"reflect"
 	"testing"
 
+	"github.com/google/uuid"
 	getopt "github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
 )

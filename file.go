@@ -203,7 +203,7 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 		// we can re-play after the subset is registered.
 		m, err := f.Decoder(data)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %v", value, err)
 		}
 		f.m = mergemap(f.m, m)
 	}

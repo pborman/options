@@ -1,4 +1,4 @@
-// Copyright 2018 Paul Borman
+// Copyright 2019 Paul Borman
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ package json
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/pborman/options"
 )
@@ -45,7 +46,7 @@ func Decoder(data []byte) (map[string]interface{}, error) {
 	m := map[string]interface{}{}
 	for decoder.More() {
 		if err := decoder.Decode(&m); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("JSON decoding error: %v", err)
 		}
 	}
 	return m, nil
