@@ -10,7 +10,7 @@ import (
 
 var theOptions = struct {
 	Flags   options.Flags `getopt:"--flags=PATH     read default flags from PATH"`
-	JFlags   options.Flags `getopt:"--json=PATH     read default flags from json blob at PATH" encoding:"json"`
+	JFlags  options.Flags `getopt:"--json=PATH     read default flags from json blob at PATH" encoding:"json"`
 	Name    string        `getopt:"--name=NAME      name of the widget"`
 	Count   int           `getopt:"--count -c=COUNT number of widgets"`
 	Verbose bool          `getopt:"-v               be verbose"`
