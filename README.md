@@ -1,4 +1,5 @@
-# options
+# options ![build status](https://travis-ci.org/pborman/options.svg?branch=master)
+
 Structured getopt processing for Go programs using the github.com/pborman/getopt/v2 package.
 
 The options package makes adding getopt style command line options to Go programs as easy as declaring a structure:
