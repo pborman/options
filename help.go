@@ -21,7 +21,7 @@ import (
 )
 
 // A Help option causes PrintUsage to be called if the the option is set.
-// Normally os.Exit(1) will be called when the option is seen.  Setting the
+// Normally os.Exit(0) will be called when the option is seen.  Setting the
 // defaulted value to true will prevent os.Exit from being called.
 //
 // Normal Usage
@@ -39,7 +39,7 @@ func (h *Help) Set(value string, opt getopt.Option) error {
 	}
 	getopt.PrintUsage(os.Stderr)
 	if !*h {
-		os.Exit(1)
+		os.Exit(0)
 	}
 	return nil
 }
