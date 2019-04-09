@@ -15,6 +15,7 @@ import (
 )
 
 var opts = struct {
+	Help    options.Help  `getopt:"--help           display help"`
 	Name    string        `getopt:"--name=NAME      name of the widget"`
 	Count   int           `getopt:"--count -c=COUNT number of widgets"`
 	Verbose bool          `getopt:"-v               be verbose"`
@@ -34,6 +35,8 @@ func main() {
 	fmt.Printf("Name: %s\n", opts.Name)
 }
 ```
+
+The options.Help type causes the command's usage to be displayed to standard error and the command to exit when the option is parsed from the command line.
 
 The options package also supports reading options from file specified on the command line or an optional defaults file:
 
