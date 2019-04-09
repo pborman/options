@@ -1,4 +1,4 @@
-# options ![build status](https://travis-ci.org/pborman/options.svg?branch=master)
+# options ![build status](https://travis-ci.org/pborman/options.svg?branch=master) [![GoDoc](https://godoc.org/github.com/pborman/options?status.svg)](http://godoc.org/github.com/pborman/options)
 
 Structured getopt processing for Go programs using the github.com/pborman/getopt/v2 package.
 
