@@ -1,3 +1,4 @@
+// Example usage of the options package.
 package main
 
 import (
@@ -9,8 +10,10 @@ import (
 )
 
 var theOptions = struct {
+	Help    options.Help  `getopt:"--help -?        dispay help"`
+	Usage   options.Help  `getopt:"--usage          dispay usage before running command"`
 	Flags   options.Flags `getopt:"--flags=PATH     read default flags from PATH"`
-	JFlags  options.Flags `getopt:"--json=PATH     read default flags from json blob at PATH" encoding:"json"`
+	JFlags  options.Flags `getopt:"--json=PATH      read default flags from json blob at PATH" encoding:"json"`
 	Name    string        `getopt:"--name=NAME      name of the widget"`
 	Count   int           `getopt:"--count -c=COUNT number of widgets"`
 	Verbose bool          `getopt:"-v               be verbose"`
@@ -18,7 +21,8 @@ var theOptions = struct {
 	Timeout time.Duration `getopt:"--timeout        duration of run"`
 	Lazy    string
 }{
-	Name: "gopher",
+	Name:  "gopher",
+	Usage: true,
 }
 
 func main() {

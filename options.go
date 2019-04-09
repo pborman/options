@@ -278,7 +278,11 @@ func register(name string, i interface{}, set *getopt.Set) error {
 			}
 			f.Decoder = decoder
 		} else {
-			set.FlagLong(opt, o.long, o.short, hv...)
+			op := set.FlagLong(opt, o.long, o.short, hv...)
+			// Values that are of type bool are flags.
+			if fv.Kind() == reflect.Bool {
+				op.SetFlag()
+			}
 		}
 	}
 	return nil

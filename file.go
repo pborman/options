@@ -92,6 +92,8 @@ var (
 // string, a bool, or one of the non-complex numeric types (e.g., int).
 type FlagsDecoder func([]byte) (map[string]interface{}, error)
 
+// RegisterEncoding registers the decoder dec with the specified name.  The
+// encoder is is specified using the "encoding" tag (e.g., `encoding:"name"`).
 func RegisterEncoding(name string, dec FlagsDecoder) {
 	decoderMu.Lock()
 	decoders[name] = dec
