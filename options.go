@@ -61,7 +61,8 @@
 // Types
 //
 // The fields of the structure can be any type that can be passed to getopt.Flag
-// as a pointer (e.g., string, int, bool, time.Duration, etc).
+// as a pointer (e.g., string, []string, int, bool, time.Duration, etc).  This
+// includes any type that implements getopt.Value.
 //
 // Example Structure
 //
