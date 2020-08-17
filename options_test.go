@@ -15,6 +15,7 @@ package options
 
 import (
 	"bytes"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -30,6 +31,7 @@ type theOptions struct {
 	N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
 	Timeout time.Duration `getopt:"--timeout        duration of run"`
 	Lazy    string
+	Unused  int `getopt:"-"`
 }
 
 var myOptions = theOptions{
@@ -50,15 +52,55 @@ Usage: program [-v] [-c COUNT] [--lazy value] [-n NUMBER] [--name NAME] [--timeo
 
 func TestLookup(t *testing.T) {
 	opt := &struct {
+		Ignore bool   `getopt:"-"`
 		Option string `getopt:"--option -o"`
+		Lazy   string
 	}{
 		Option: "value",
+		Lazy:   "lazy",
 	}
 	if o := Lookup(opt, "option"); o.(string) != "value" {
 		t.Errorf("--option returned value %q, want %q", o, "value")
 	}
 	if o := Lookup(opt, "o"); o.(string) != "value" {
 		t.Errorf("-o returned value %q, want %q", o, "value")
+	}
+	if o := Lookup(opt, "lazy"); o.(string) != "lazy" {
+		t.Errorf("--lazy returned value %q, want %q", o, "lazy")
+	}
+	if o := Lookup("a", "a"); o != nil {
+		t.Errorf("string returned %v, want nil", o)
+	}
+	if o := Lookup(new(string), "a"); o != nil {
+		t.Errorf("*string returned %v, want nil", o)
+	}
+	if o := Lookup(opt, "missgin"); o != nil {
+		t.Errorf("missing returned %v, want nil", o)
+	}
+	opt2 := &struct {
+		Invalid string `getopt:"invalid tag"`
+		Option  string `getopt:"--option -o"`
+		Lazy    string
+	}{
+		Option: "value",
+	}
+	if o := Lookup(opt2, "option"); o != nil {
+		t.Errorf("able to lookup past invalid tag")
+	}
+}
+
+func TestValidate(t *testing.T) {
+	opts := &struct {
+		Name string `getopt:"--the_name"`
+	}{}
+	if err := Validate(opts); err != nil {
+		t.Errorf("Validate returned error %v for valid set", err)
+	}
+	opts2 := struct {
+		Name string `getopt:"the_name"`
+	}{}
+	if err := Validate(opts2); err == nil {
+		t.Errorf("Validate did not return an error for an valid set")
 	}
 }
 
@@ -105,11 +147,49 @@ func TestRegisterSet(t *testing.T) {
 	})
 }
 
+func TestRegister(t *testing.T) {
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Errorf("Regiser did not panic on string")
+			}
+		}()
+		Register("a")
+	}()
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Errorf("Register did not panic on *string")
+			}
+		}()
+		Register(new(string))
+	}()
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Errorf("Registerdid not panic on bad tag")
+			}
+		}()
+		register("test", &struct {
+			F Flags `getopt:"bad"`
+		}{}, getopt.New())
+	}()
+	if err := register("test", &struct {
+		F Flags `encoding:"bob"`
+	}{}, getopt.New()); err == nil {
+		t.Errorf("Did not get an error on bad encoding")
+	}
+}
+
 func TestParseTag(t *testing.T) {
 	for _, tt := range []struct {
 		name string
 		in   string
 		tag  *optTag
+		str  string
 		err  string
 	}{
 		{
@@ -126,6 +206,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long arg",
 			in:   "--option",
+			str:  "{ --option }",
 			tag: &optTag{
 				long: "option",
 			},
@@ -133,6 +214,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "short arg",
 			in:   "-o",
+			str:  "{ -o }",
 			tag: &optTag{
 				short: 'o',
 			},
@@ -140,6 +222,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long help",
 			in:   "--option this is an option",
+			str:  `{ --option "this is an option" }`,
 			tag: &optTag{
 				long: "option",
 				help: "this is an option",
@@ -148,6 +231,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long help1",
 			in:   "--option -- this is an option",
+			str:  `{ --option "this is an option" }`,
 			tag: &optTag{
 				long: "option",
 				help: "this is an option",
@@ -156,6 +240,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long help2",
 			in:   "--option - this is an option",
+			str:  `{ --option "this is an option" }`,
 			tag: &optTag{
 				long: "option",
 				help: "this is an option",
@@ -164,6 +249,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long help3",
 			in:   "--option -- -this is an option",
+			str:  `{ --option "-this is an option" }`,
 			tag: &optTag{
 				long: "option",
 				help: "-this is an option",
@@ -172,6 +258,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long and short arg",
 			in:   "--option -o",
+			str:  "{ --option -o }",
 			tag: &optTag{
 				long:  "option",
 				short: 'o',
@@ -180,6 +267,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "short and long arg",
 			in:   "-o --option",
+			str:  "{ --option -o }",
 			tag: &optTag{
 				long:  "option",
 				short: 'o',
@@ -188,6 +276,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "long arg with param",
 			in:   "--option=PARAM",
+			str:  "{ --option =PARAM }",
 			tag: &optTag{
 				long:  "option",
 				param: "PARAM",
@@ -196,6 +285,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "short arg with param",
 			in:   "-o=PARAM",
+			str:  "{ -o =PARAM }",
 			tag: &optTag{
 				short: 'o',
 				param: "PARAM",
@@ -204,6 +294,7 @@ func TestParseTag(t *testing.T) {
 		{
 			name: "everything",
 			in:   "--option=PARAM -o -- - this is help",
+			str:  `{ --option -o =PARAM "- this is help" }`,
 			tag: &optTag{
 				long:  "option",
 				short: 'o',
@@ -246,6 +337,11 @@ func TestParseTag(t *testing.T) {
 			in:   "---option",
 			err:  "tag must not start with ---",
 		},
+		{
+			name: "invalid short name",
+			in:   "-short",
+			err:  `getopt tag has invalid short name: "-short"`,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			tag, err := parseTag(tt.in)
@@ -261,6 +357,83 @@ func TestParseTag(t *testing.T) {
 			if !reflect.DeepEqual(tag, tt.tag) {
 				t.Errorf("got %v, want %v", tag, tt.tag)
 			}
+			if tag != nil {
+				str := tag.String()
+				if str != tt.str {
+					t.Errorf("%s: got string %q, want %q", tt.name, str, tt.str)
+				}
+			}
 		})
+	}
+}
+
+func TestArgPrefix(t *testing.T) {
+	for _, tt := range []struct {
+		in  string
+		out string
+	}{
+		{"a", ""},
+		{"-a", "-"},
+		{"--a", "--"},
+		{"", ""},
+		{"-", "-"},
+		{"--", "--"},
+	} {
+		if out := argPrefix(tt.in); out != tt.out {
+			t.Errorf("argPrefix(%q) got %q want %q", tt.in, out, tt.out)
+		}
+	}
+}
+
+func TestDup(t *testing.T) {
+	// Most of Dup is tested via other test methods.  We need to test the errors.
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Errorf("Did not panic on string")
+			}
+		}()
+		Dup("a")
+	}()
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Errorf("Did not panic on *string")
+			}
+		}()
+		Dup(new(string))
+	}()
+	func() {
+		defer func() {
+			p := recover()
+			if p == nil {
+				t.Errorf("Did not panic on bad tag")
+			}
+		}()
+		Dup(&struct {
+			Opt bool `getopt:"bad tag"`
+		}{})
+	}()
+}
+
+func TestParse(t *testing.T) {
+	args, cl := os.Args, getopt.CommandLine
+	defer func() {
+		os.Args, getopt.CommandLine = args, cl
+	}()
+	getopt.CommandLine = getopt.New()
+	opts := &struct {
+		Name string `geopt:"--name a name"`
+	}{}
+	Register(opts)
+	os.Args = []string{"test", "--name", "bob", "arg"}
+	pargs := Parse()
+	if opts.Name != "bob" {
+		t.Errorf("Got name %q, want %q", opts.Name, "bob")
+	}
+	if len(pargs) != 1 || pargs[0] != "arg" {
+		t.Errorf("Got args %q, want %q", pargs, []string{"arg"})
 	}
 }
