@@ -261,7 +261,8 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 			var s string
 			switch v := v.(type) {
 			case TextMarshaler:
-				data, err := v.MarshalText()
+				var data []byte
+				data, err = v.MarshalText()
 				if err != nil {
 					return
 				}
