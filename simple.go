@@ -88,7 +88,12 @@ func SimpleDecoder(data []byte) (map[string]interface{}, error) {
 			}
 			fields = fields[1:]
 		}
-		m[fields[0]] = value
+		switch m[fields[0]].(type) {
+		case nil, string:
+			m[fields[0]] = value
+		default:
+			return nil, fmt.Errorf("%s: conflict on field %s", name, fields[0])
+		}
 	}
 	return m, nil
 }

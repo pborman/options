@@ -86,17 +86,39 @@ func TestSimpleDecoder(t *testing.T) {
 			err:  `missing name: "=value"`,
 		},
 		{
+			name: "field conflict1",
+			in: `
+sub = other
+sub.key = value
+`,
+			err: "conflict on field sub",
+		},
+		{
+			name: "field conflict2",
+			in: `
+sub.key = value
+sub = other
+`,
+			err: "conflict on field sub",
+		},
+		{
 			name: "complex",
 			in: `
 # This is a multiple line test
 key1=value1
   key2 = "value 2" # comment
 key3 = "value #" # the comment wasn't escaped
+sub.key1 = subvalue1
+sub.key2 = subvalue2
 `,
 			m: map[string]interface{}{
 				"key1": `value1`,
 				"key2": `value 2`,
 				"key3": `"value`,
+				"sub": map[string]interface{}{
+					"key1": "subvalue1",
+					"key2": "subvalue2",
+				},
 			},
 		},
 	} {
