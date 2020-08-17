@@ -281,7 +281,7 @@ func (f *Flags) Set(value string, opt getopt.Option) error {
 					s = "false"
 				}
 			default:
-				err = fmt.Errorf("%s: %q not a string or number", value, n)
+				err = fmt.Errorf("%s: %T not a string or number", value, v)
 				return
 			}
 			// Don't override set values
