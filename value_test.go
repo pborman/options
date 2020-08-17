@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pborman/options"
 	"github.com/pborman/getopt/v2"
+	"github.com/pborman/options"
 )
 
 type myType struct {
