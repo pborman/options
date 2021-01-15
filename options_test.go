@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/pborman/getopt/v2"
+	"github.com/pborman/check"
 )
 
 type theOptions struct {
@@ -103,6 +104,50 @@ func TestRegisterSet(t *testing.T) {
 			t.Errorf("%s=%q, want %q", o.Name(), v, "fred")
 		}
 	})
+}
+
+func TestSubRegisterAndParse(t *testing.T) {
+	opts := struct {
+		Value string `getopt:"--the_name=VALUE help"`
+	}{
+		Value: "bob",
+	}
+
+	for _, tt := range []struct {
+		args  []string
+		err   string
+		value string
+		out   []string
+	}{{
+		args:  []string{"name"},
+		value: "bob",
+		out: []string{},
+	}, {
+		args:  []string{"name", "-x"},
+		err: "unknown option: -x",
+		value: "bob",
+	}, {
+		args:  []string{"name","--the_name=fred"},
+		value: "fred",
+		out: []string{},
+	}, {
+		args:  []string{"name","--the_name=fred","a","b","c"},
+		value: "fred",
+		out:   []string{"a", "b", "c"},
+	}} {
+		myopts := opts
+		args, err := SubRegisterAndParse(&myopts, tt.args)
+		if s := check.Error(err, tt.err); s != "" {
+			t.Errorf("%s", s)
+			continue
+		}
+		if tt.value != myopts.Value {
+			t.Errorf("%q got value %q, want %q", tt.args, myopts.Value, tt.value)
+		}
+		if !reflect.DeepEqual(tt.out, args) {
+			t.Errorf("%q got args %q, want %q", tt.args, args, tt.out)
+		}
+	}
 }
 
 func TestParseTag(t *testing.T) {
