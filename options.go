@@ -180,6 +180,49 @@ func RegisterAndParse(i interface{}) []string {
 	return getopt.Args()
 }
 
+// SubRegisterAndParse is similar to RegisterAndParse except it is provided the
+// arguments as args and on error the error is returned rather than written to
+// standard error and the exiting the program.  This is done by creating a new
+// getopt set, registering i with that set, and then calling Getopt on the set
+// with args.
+//
+// SubRegisterAndParse is useful when you want to parse arguments other than
+// os.Args (which is what RegisterAndParse does).
+//
+// The first element of args is equivalent to a command name and is not parsed.
+//
+// EXAMPLE:
+//
+//	func nameCommand(args []string) error {
+//		opts := &struct {
+//			Name string `getopt:"--name NAME the name to use"`
+//		}{
+//			Name: "none",
+//		}
+//		// If args does not include the subcommand name then prepend it
+//		args = append([]string{"name"}, args...)
+//
+//		args, err := options.SubRegisterAndParse(opts, args)
+//		if err != nil {
+//			return err
+//		}
+//		fmt.Printf("The name is %s\n", opts.Name)
+//		fmt.Printf("The parameters are: %q\n", args)
+//	}
+func SubRegisterAndParse(i interface{}, args[]string) ([]string, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+        set := getopt.New()
+        if err := RegisterSet(args[0], i, set); err != nil {
+                return nil, err
+        }
+        if err := set.Getopt(args, nil); err != nil {
+                return nil, err
+        }
+        return set.Args(), nil
+}
+
 // Parse calls getopt.Parse and returns getopt.Args().
 func Parse() []string {
 	getopt.Parse()
