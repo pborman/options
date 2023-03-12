@@ -148,7 +148,6 @@ func TestRegisterSet(t *testing.T) {
 	})
 }
 
-<<<<<<< HEAD
 func TestRegister(t *testing.T) {
 	func() {
 		defer func() {
@@ -183,7 +182,9 @@ func TestRegister(t *testing.T) {
 		F Flags `encoding:"bob"`
 	}{}, getopt.New()); err == nil {
 		t.Errorf("Did not get an error on bad encoding")
-=======
+	}
+}
+
 func TestSubRegisterAndParse(t *testing.T) {
 	opts := struct {
 		Value string `getopt:"--the_name=VALUE help"`
@@ -225,7 +226,6 @@ func TestSubRegisterAndParse(t *testing.T) {
 		if !reflect.DeepEqual(tt.out, args) {
 			t.Errorf("%q got args %q, want %q", tt.args, args, tt.out)
 		}
->>>>>>> 67272c345e383137742e13808a8baead90629c4d
 	}
 }
 
