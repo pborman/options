@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/getopt/v2"
 	"github.com/pborman/check"
+	"github.com/pborman/getopt/v2"
 )
 
 type theOptions struct {
@@ -200,17 +200,17 @@ func TestSubRegisterAndParse(t *testing.T) {
 	}{{
 		args:  []string{"name"},
 		value: "bob",
-		out: []string{},
+		out:   []string{},
 	}, {
 		args:  []string{"name", "-x"},
-		err: "unknown option: -x",
+		err:   "unknown option: -x",
 		value: "bob",
 	}, {
-		args:  []string{"name","--the_name=fred"},
+		args:  []string{"name", "--the_name=fred"},
 		value: "fred",
-		out: []string{},
+		out:   []string{},
 	}, {
-		args:  []string{"name","--the_name=fred","a","b","c"},
+		args:  []string{"name", "--the_name=fred", "a", "b", "c"},
 		value: "fred",
 		out:   []string{"a", "b", "c"},
 	}} {

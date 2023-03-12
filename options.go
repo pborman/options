@@ -20,7 +20,7 @@
 // Package options also provides a facility to specify command line options in a
 // text file by using the Flags type (described below).
 //
-// Option Decorations
+// # Option Decorations
 //
 // Options are declared in a structure that contains all information needed for
 // the options.  Each exported field of the structure represents an option.  The
@@ -44,7 +44,7 @@
 // declarations, everything following is the description.  This enables the
 // description to start with a -, e.g. "-v -- -v means verbose".
 //
-// Example Tags
+// # Example Tags
 //
 // The following are example tags
 //
@@ -58,43 +58,43 @@
 //	Name string -> "--name unspecified"
 //	N int       -> "-n unspecified"
 //
-// Types
+// # Types
 //
 // The fields of the structure can be any type that can be passed to getopt.Flag
 // as a pointer (e.g., string, []string, int, bool, time.Duration, etc).  This
 // includes any type that implements getopt.Value.
 //
-// Example Structure
+// # Example Structure
 //
 // The following structure declares 7 options and sets the default value of
 // Count to be 42.  The --flags option is used to read option values from
 // a file.
 //
-//  type theOptions struct {
-//      Flags   options.Flags `getopt:"--flags=PATH     read defaults from path"`
-//      Name    string        `getopt:"--name=NAME      name of the widget"`
-//      Count   int           `getopt:"--count -c=COUNT number of widgets"`
-//      Verbose bool          `getopt:"-v               be verbose"`
-//      N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
-//      Timeout time.Duration `getopt:"--timeout        duration of run"`
-//      Lazy    string
-//  }
-//  var myOptions = theOptions {
-//      Count: 42,
-//  }
+//	type theOptions struct {
+//	    Flags   options.Flags `getopt:"--flags=PATH     read defaults from path"`
+//	    Name    string        `getopt:"--name=NAME      name of the widget"`
+//	    Count   int           `getopt:"--count -c=COUNT number of widgets"`
+//	    Verbose bool          `getopt:"-v               be verbose"`
+//	    N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
+//	    Timeout time.Duration `getopt:"--timeout        duration of run"`
+//	    Lazy    string
+//	}
+//	var myOptions = theOptions {
+//	    Count: 42,
+//	}
 //
 // The help message generated from theOptions is:
 //
-//    Usage:  [-v] [-c COUNT] [--flags PATH] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
-//     -c, --count=COUNT    number of widgets
-//         --flags=PATH     read defaults from PATH
-//         --lazy=value     unspecified
-//     -n NUMBER            set n to NUMBER
-//         --name=NAME      name of the widget
-//         --timeout=value  duration of run
-//     -v                   be verbose
+//	Usage:  [-v] [-c COUNT] [--flags PATH] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
+//	 -c, --count=COUNT    number of widgets
+//	     --flags=PATH     read defaults from PATH
+//	     --lazy=value     unspecified
+//	 -n NUMBER            set n to NUMBER
+//	     --name=NAME      name of the widget
+//	     --timeout=value  duration of run
+//	 -v                   be verbose
 //
-// Usage
+// # Usage
 //
 // The following are various ways to use the above declaration.
 //
@@ -209,18 +209,18 @@ func RegisterAndParse(i interface{}) []string {
 //		fmt.Printf("The name is %s\n", opts.Name)
 //		fmt.Printf("The parameters are: %q\n", args)
 //	}
-func SubRegisterAndParse(i interface{}, args[]string) ([]string, error) {
+func SubRegisterAndParse(i interface{}, args []string) ([]string, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
-        set := getopt.New()
-        if err := RegisterSet(args[0], i, set); err != nil {
-                return nil, err
-        }
-        if err := set.Getopt(args, nil); err != nil {
-                return nil, err
-        }
-        return set.Args(), nil
+	set := getopt.New()
+	if err := RegisterSet(args[0], i, set); err != nil {
+		return nil, err
+	}
+	if err := set.Getopt(args, nil); err != nil {
+		return nil, err
+	}
+	return set.Args(), nil
 }
 
 // Parse calls getopt.Parse and returns getopt.Args().
@@ -336,11 +336,9 @@ func register(name string, i interface{}, set *getopt.Set) error {
 // Lookup can be used if the structure declaring the options is not available.
 // Lookup returns nil if i is invalid or does not have an option named option.
 //
-// Example
+// # Example
 //
 // Fetch the verbose flag from an anonymous structure:
-//
-//
 //
 //	i, set := options.RegisterNew(&struct {
 //		Verbose bool `getopt:"--verbose -v be verbose"`
