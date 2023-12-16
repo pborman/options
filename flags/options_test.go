@@ -19,36 +19,30 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/openconfig/gnmi/errdiff"
 )
 
-type theOptions struct {
-	Name    string        `getopt:"--name=NAME      name of the widget"`
-	Count   int           `getopt:"--count -c=COUNT number of widgets"`
-	Verbose bool          `getopt:"-v               be verbose"`
-	N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
-	Timeout time.Duration `getopt:"--timeout        duration of run"`
-	Lazy    string
-	Unused  int `getopt:"-"`
-}
+type X string
+func (x *X)Set(s string) error { *x = X(s); return nil }
+func (x *X)String() string { return (string)(*x) }
 
-var myOptions = theOptions{
-	Count: 42,
+func TestVar(t *testing.T) {
+	var x X
+	fs := flag.NewFlagSet("v", flag.ExitOnError)
+	if err := setvar(fs, &x, "flag", "usage"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	fs.VisitAll(func(f *flag.Flag) {
+		if f.Name == "flag" {
+			found = true
+		}
+	})
+	if !found {
+		t.Errorf("flag was not set")
+	}
 }
-
-// This is the help we expect from theOptions.  If you change theOptions then
-// you must change this string.  Note that getopt.HelpColumn must be set to 25.
-var theHelp = `
-Usage: program [-v] [-c COUNT] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
- -c, --count=COUNT    number of widgets [42]
-     --lazy=value     unspecified
- -n NUMBER            set n to NUMBER
-     --name=NAME      name of the widget
-     --timeout=value  duration of run
- -v                   be verbose
-`[1:]
 
 func TestLookup(t *testing.T) {
 	opt := &struct {
@@ -107,9 +101,9 @@ func TestRegisterSet(t *testing.T) {
 	}{
 		Name: "bob",
 	}
-	s := flag.NewFlagSet("", flag.ExitOnError)
+	s := NewFlagSet("")
 	RegisterSet("", opts, s)
-	s.VisitAll(func(f *flag.Flag) {
+	s.(*flag.FlagSet).VisitAll(func(f *flag.Flag) {
 		if f.Name != "the_name" {
 			t.Errorf("unexpected option found: %q", f.Name)
 			return
@@ -119,7 +113,7 @@ func TestRegisterSet(t *testing.T) {
 		}
 	})
 	s.Parse([]string{"--the_name", "fred"})
-	s.VisitAll(func(f *flag.Flag) {
+	s.(*flag.FlagSet).VisitAll(func(f *flag.Flag) {
 		if f.Name != "the_name" {
 			t.Errorf("unexpected option found: %q", f.Name)
 			return
@@ -158,8 +152,39 @@ func TestRegister(t *testing.T) {
 		}()
 		register("test", &struct {
 			F int `getopt:"bad"`
-		}{}, flag.NewFlagSet("", flag.ExitOnError))
+		}{}, NewFlagSet(""))
 	}()
+}
+
+func TestMultiString(t *testing.T) {
+	var opts struct {
+		Value []string `getopt:"--multi=VALUE help"`
+		List  []string    `getopt:"--list=VALUE help"`
+	}
+	_, err := SubRegisterAndParse(&opts, []string{"name", "--multi", "value1", "--multi", "value2", "--list", "item1", "--list", "item2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(opts.Value) != 2 {
+		t.Errorf("got %d values, want 2", len(opts.Value))
+	} else {
+		if opts.Value[0] != "value1" {
+			t.Errorf("got %s, want value1", opts.Value[0])
+		}
+		if opts.Value[1] != "value2" {
+			t.Errorf("got %s, want value2", opts.Value[1])
+		}
+	}
+	if len(opts.List) != 2 {
+		t.Errorf("got %d values, want 2", len(opts.List))
+	} else {
+		if opts.List[0] != "item1" {
+			t.Errorf("got %s, want item1", opts.List[0])
+		}
+		if opts.List[1] != "item2" {
+			t.Errorf("got %s, want item2", opts.List[1])
+		}
+	}
 }
 
 func TestSubRegisterAndParse(t *testing.T) {
@@ -404,7 +429,7 @@ func TestParse(t *testing.T) {
 	defer func() {
 		os.Args, flag.CommandLine = args, cl
 	}()
-	flag.CommandLine = flag.NewFlagSet("", flag.ExitOnError)
+	CommandLine = NewFlagSet("")
 	opts := &struct {
 		Name string `geopt:"--name a name"`
 	}{}

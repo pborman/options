@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 
 // Package flags is a simplified version github.com/pborman/options that works
-// with the standard flag package.
+// with the standard flag package and possibly other flag packages.
 //
 // Package flags provides a structured interface for flag parsing.  It is
 // particularly helpful for parsing an option set more than once and possibly
@@ -59,14 +59,17 @@
 //
 // # Types
 //
-// The fields of the structure must one of the following:
+// The fields of the structure must be compatible with one of the folllowing
+// types:
 //	bool
 //	int
 //	int64
+//	float64
 //	string
 //	uint
 //	uint64
-//	flag.Value
+//	[]string
+//	Value
 //	time.Duration
 //
 // # Example Structure
@@ -80,6 +83,7 @@
 //	    Verbose bool          `getopt:"-v            be verbose"`
 //	    N       int           `getopt:"-n=NUMBER     set n to NUMBER"`
 //	    Timeout time.Duration `getopt:"--timeout     duration of run"`
+//	    List    []string      `getopt:"--list=ITEM   add ITEM to the list"`
 //	    Lazy    string
 //	}
 //	var myOptions = theOptions {
@@ -113,10 +117,57 @@ package flags
 import (
 	"flag"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
 )
+
+// Value is the interface to the dynamic value stored in a flag. (The default
+// value is represented as a string.) Value is a copy of flag.Value
+type Value interface {
+	String() string
+	Set(string) error
+}
+
+// NewFlagSet and CommandLine can be replaced to use a different flag package.
+// They default to the standard flag package.
+var (
+	NewFlagSet  = func(name string) FlagSet { return flag.NewFlagSet(name, flag.ExitOnError) }
+	CommandLine FlagSet = flag.CommandLine
+)
+
+// A FlagSet implements a set of flags.  flag.FlagSet from the standard flag package implements FlagSet.
+// The FlagSet must also have the method:
+//
+//	Var(v valueType, name, usage string)
+//
+// Where valueType implements the Value interface (which flag.Value does).
+// We cannot put Var in the interface due to the Value type.
+type FlagSet interface {
+	Parse([]string) error
+	Args() []string
+	NArg() int
+	DurationVar(p *time.Duration, name string, value time.Duration, usage string)
+	StringVar(p *string, name string, value string, usage string)
+	IntVar(p *int, name string, value int, usage string)
+	Int64Var(p *int64, name string, value int64, usage string)
+	UintVar(p *uint, name string, value uint, usage string)
+	Uint64Var(p *uint64, name string, value uint64, usage string)
+	Float64Var(p *float64, name string, value float64, usage string)
+	BoolVar(p *bool, name string, value bool, usage string)
+}
+
+type list []string
+
+func (l *list) Set(s string) error {
+	*l = append(*l, s)
+	return nil
+}
+
+func (l *list) String() string {
+	return strings.Join(*l, " ")
+}
 
 // Dup returns a shallow duplicate of i or panics.  Dup panics if i is not a
 // pointer to struct or has an invalid getopt tag.  Dup does not copy
@@ -159,7 +210,7 @@ func Dup(i interface{}) interface{} {
 // Register registers the fields in i with the standard command-line option set.
 // It panics for the same reasons that RegisterSet panics.
 func Register(i interface{}) {
-	if err := register("", i, flag.CommandLine); err != nil {
+	if err := register("", i, CommandLine); err != nil {
 		panic(err)
 	}
 }
@@ -168,8 +219,8 @@ func Register(i interface{}) {
 // getopt.Args().
 func RegisterAndParse(i interface{}) []string {
 	Register(i)
-	flag.Parse()
-	return flag.Args()
+	CommandLine.Parse(os.Args[1:])
+	return CommandLine.Args()
 }
 
 // SubRegisterAndParse is similar to RegisterAndParse except it is provided the
@@ -205,7 +256,7 @@ func SubRegisterAndParse(i interface{}, args []string) ([]string, error) {
 	if len(args) == 0 {
 		return nil, nil
 	}
-	set := flag.NewFlagSet("", flag.ExitOnError)
+	set := NewFlagSet("")
 	if err := RegisterSet(args[0], i, set); err != nil {
 		return nil, err
 	}
@@ -217,8 +268,8 @@ func SubRegisterAndParse(i interface{}, args []string) ([]string, error) {
 
 // Parse calls flag.Parse and returns flag.Args().
 func Parse() []string {
-	flag.Parse()
-	return flag.Args()
+	CommandLine.Parse(os.Args[1:])
+	return CommandLine.Args()
 }
 
 // Validate validates i as a set of options or returns an error.
@@ -227,15 +278,15 @@ func Parse() []string {
 // will not panic.  Validate is typically called by an init function on
 // structures that will be registered later.
 func Validate(i interface{}) error {
-	set := flag.NewFlagSet("", flag.ExitOnError)
+	set := NewFlagSet("")
 	return register("", i, set)
 }
 
 // RegisterNew creates a new flag.FlagSet, duplicates i, calls RegisterSet, and
 // then returns them.  RegisterNew should be used when the options in i might be
 // parsed multiple times requiring a new instance of i each time.
-func RegisterNew(name string, i interface{}) (interface{}, *flag.FlagSet) {
-	set := flag.NewFlagSet("", flag.ExitOnError)
+func RegisterNew(name string, i interface{}) (interface{}, FlagSet) {
+	set := NewFlagSet("")
 	i = Dup(i)
 	if err := register(name, i, set); err != nil {
 		panic(err)
@@ -253,11 +304,11 @@ func RegisterNew(name string, i interface{}) (interface{}, *flag.FlagSet) {
 //
 // See the package documentation for a description of the structure to pass to
 // RegisterSet.
-func RegisterSet(name string, i interface{}, set *flag.FlagSet) error {
+func RegisterSet(name string, i interface{}, set FlagSet) error {
 	return register(name, i, set)
 }
 
-func register(name string, i interface{}, set *flag.FlagSet) error {
+func register(name string, i interface{}, set FlagSet) error {
 	v := reflect.ValueOf(i)
 	if v.Kind() != reflect.Ptr {
 		return fmt.Errorf("%T is not a pointer to a struct", i)
@@ -292,8 +343,10 @@ func register(name string, i interface{}, set *flag.FlagSet) error {
 		}
 		opt := fv.Addr().Interface()
 		switch t := opt.(type) {
-		case flag.Value:
-			set.Var(t, o.name, o.help)
+		case Value:
+			setvar(set, t, o.name, o.help)
+		case *[]string:
+			setvar(set, (*list)(t), o.name, o.help)
 		case *time.Duration:
 			set.DurationVar(t, o.name, *t, o.help)
 		case *string:
@@ -306,6 +359,8 @@ func register(name string, i interface{}, set *flag.FlagSet) error {
 			set.UintVar(t, o.name, *t, o.help)
 		case *uint64:
 			set.Uint64Var(t, o.name, *t, o.help)
+		case *float64:
+			set.Float64Var(t, o.name, *t, o.help)
 		case *bool:
 			set.BoolVar(t, o.name, *t, o.help)
 		default:
@@ -352,7 +407,7 @@ func Lookup(i interface{}, option string) interface{} {
 			return nil
 		}
 		if o == nil {
-			o = &optTag{ name: strings.ToLower(field.Name) }
+			o = &optTag{name: strings.ToLower(field.Name)}
 		}
 		if option == o.name {
 			return fv.Interface()
@@ -453,4 +508,33 @@ func argPrefix(a string) string {
 		}
 	}
 	return a
+}
+
+var (
+	valueInterface Value
+	valueType      = reflect.TypeOf(&valueInterface).Elem()
+	stringType     = reflect.TypeOf("")
+)
+
+// setvar calls fs.Var(value, name, usage).  The value type Var expects must
+// implement the Value inteface.  This enables this package to pass a Value
+// where the flag package expected a flag.Value.  An error is returned
+// if fs does not have a Var method with an appropriate signature.
+func setvar(fs interface{}, value Value, name, usage string) error {
+	v := reflect.ValueOf(fs)
+	m := v.MethodByName("Var")
+	if !m.IsValid() {
+		return fmt.Errorf("Type %v missing Var method", v.Type())
+	}
+	t := m.Type()
+	// We want to be able to call Var(value, name, usage)
+	if t.NumIn() != 3 || t.NumOut() != 0 || !t.In(0).Implements(valueType) || !t.In(1).AssignableTo(stringType) || !t.In(1).AssignableTo(stringType) {
+		return fmt.Errorf("Type %v has the wrong signature for Var", v.Type())
+	}
+	m.Call([]reflect.Value{
+		reflect.ValueOf(value),
+		reflect.ValueOf(name),
+		reflect.ValueOf(usage),
+	})
+	return nil
 }
