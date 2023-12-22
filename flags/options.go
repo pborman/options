@@ -61,6 +61,7 @@
 //
 // The fields of the structure must be compatible with one of the folllowing
 // types:
+//
 //	bool
 //	int
 //	int64
@@ -117,8 +118,10 @@ package flags
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 )
@@ -133,7 +136,7 @@ type Value interface {
 // NewFlagSet and CommandLine can be replaced to use a different flag package.
 // They default to the standard flag package.
 var (
-	NewFlagSet  = func(name string) FlagSet { return flag.NewFlagSet(name, flag.ExitOnError) }
+	NewFlagSet          = func(name string) FlagSet { return flag.NewFlagSet(name, flag.ExitOnError) }
 	CommandLine FlagSet = flag.CommandLine
 )
 
@@ -148,6 +151,7 @@ type FlagSet interface {
 	Parse([]string) error
 	Args() []string
 	NArg() int
+	SetOutput(io.Writer)
 	DurationVar(p *time.Duration, name string, value time.Duration, usage string)
 	StringVar(p *string, name string, value string, usage string)
 	IntVar(p *int, name string, value int, usage string)
@@ -537,4 +541,119 @@ func setvar(fs interface{}, value Value, name, usage string) error {
 		reflect.ValueOf(usage),
 	})
 	return nil
+}
+
+// Help writes help information for the flag set specified by i where i is a
+// pointer to a structure as described above.  As an example:
+//
+//	opts := &struct {
+//		Alpha   string   `getopt:"--alpha=LEVEL set the alpha level"`
+//		Beta    int      `getopt:"--beta=N      set beta to N"`
+//		Float   float64  `getopt:"-f=RATE       set frame rate to RATE"`
+//		Fancy   bool     `getopt:"--the_real_fancy_and_long_option yes or no"`
+//		Verbose bool     `getopt:"-v            be verbose"`
+//		List    []string `getopt:"--list=ITEM   add ITEM to list"`
+//	}{}
+//	Help(os.Stderr, "xyzzy", "...", opts)
+//
+// Will write the following to standard error:
+//
+//	Usage: xyzzy [--alpha=LEVEL] [--beta=N] [ -f=RATE] [--the_real_fancy_and_long_option] [ -v] [--list=ITEM] ...
+//	--alpha=LEVEL  set the alpha level
+//	--beta=N       set beta to N
+//	 -f=RATE       set frame rate to RATE
+//	--list=ITEM    add ITEM to list
+//	--the_real_fancy_and_long_option
+//	               yes or no
+//	 -v            be verbose
+//
+// If cmd is the empty string the initial line will not be printed.
+func Help(w io.Writer, cmd, parameters string, i interface{}) {
+	if i == nil {
+		if cmd == "" {
+			return
+		}
+		if parameters != "" {
+			fmt.Fprintf(w, "Usage: %s %s\n", cmd, parameters)
+		} else {
+			fmt.Fprintf(w, "Usage: %s ...\n", cmd)
+		}
+		return
+	}
+	v := reflect.ValueOf(i)
+	if v.Kind() != reflect.Ptr {
+		fmt.Fprintf(w, "%T is not a pointer to a struct\n", i)
+		return
+	}
+	v = v.Elem()
+	if v.Kind() != reflect.Struct {
+		fmt.Fprintf(w, "%T is not a pointer to a struct\n", i)
+		return
+	}
+	t := v.Type()
+
+	n := t.NumField()
+	type info struct {
+		prefix string
+		flag   string
+		help   string
+	}
+	var usage []info
+	ml := 0
+	for i := 0; i < n; i++ {
+		field := t.Field(i)
+		fv := v.Field(i)
+		tag := field.Tag.Get("getopt")
+		if tag == "-" || !fv.CanSet() {
+			continue
+		}
+		o, err := parseTag(tag)
+		if err != nil {
+			continue
+		}
+		if o == nil {
+			o = &optTag{name: strings.ToLower(field.Name)}
+		}
+		i := info{
+			prefix: "--",
+			flag:   o.name,
+			help:   o.help,
+		}
+		if len(o.name) == 1 {
+			i.prefix = " -"
+		}
+		opt := fv.Addr().Interface()
+		if _, ok := opt.(*bool); !ok {
+			if o.param == "" {
+				o.param = "VALUE"
+			}
+			i.flag += "=" + o.param
+		}
+		if n := len(i.flag) + 1 + len(i.prefix); n > ml && n <= 20 {
+			ml = n
+		}
+		usage = append(usage, i)
+	}
+	sort.Slice(usage, func(i, j int) bool { return usage[i].flag < usage[j].flag })
+	if ml > 20 {
+		ml = 20
+	}
+	if cmd != "" {
+		fmt.Fprintf(w, "Usage: %s", cmd)
+		for _, i := range usage {
+			fmt.Fprintf(w, " [%s%s]", i.prefix, i.flag)
+		}
+		if parameters != "" {
+			fmt.Fprintf(w, " %s", parameters)
+		}
+		fmt.Fprintln(w)
+	}
+	for _, i := range usage {
+		flag := i.prefix + i.flag
+		if len(flag) > ml {
+			fmt.Fprintf(w, "%s\n%*s %s\n", flag, ml, "", i.help)
+		} else {
+			fmt.Fprintf(w, "%s%*s %s\n", flag, ml-len(flag), "", i.help)
+		}
+	}
 }

@@ -14,6 +14,7 @@
 package flags
 
 import (
+	"bytes"
 	"flag"
 	"os"
 	"reflect"
@@ -24,8 +25,9 @@ import (
 )
 
 type X string
-func (x *X)Set(s string) error { *x = X(s); return nil }
-func (x *X)String() string { return (string)(*x) }
+
+func (x *X) Set(s string) error { *x = X(s); return nil }
+func (x *X) String() string     { return (string)(*x) }
 
 func TestVar(t *testing.T) {
 	var x X
@@ -47,7 +49,7 @@ func TestVar(t *testing.T) {
 func TestLookup(t *testing.T) {
 	opt := &struct {
 		Ignore bool   `getopt:"-"`
-		Option string `getopt:"--option"`
+		Option string `getopt:"--option=A_VERY_LONG_NAME some flag"`
 		Lazy   string
 	}{
 		Option: "value",
@@ -159,7 +161,7 @@ func TestRegister(t *testing.T) {
 func TestMultiString(t *testing.T) {
 	var opts struct {
 		Value []string `getopt:"--multi=VALUE help"`
-		List  []string    `getopt:"--list=VALUE help"`
+		List  []string `getopt:"--list=VALUE help"`
 	}
 	_, err := SubRegisterAndParse(&opts, []string{"name", "--multi", "value1", "--multi", "value2", "--list", "item1", "--list", "item2"})
 	if err != nil {
@@ -441,5 +443,55 @@ func TestParse(t *testing.T) {
 	}
 	if len(pargs) != 1 || pargs[0] != "arg" {
 		t.Errorf("Got args %q, want %q", pargs, []string{"arg"})
+	}
+}
+
+func TestHelp(t *testing.T) {
+	opts := &struct {
+		Alpha   string   `getopt:"--alpha=LEVEL set the alpha level"`
+		Beta    int      `getopt:"--beta=N      set beta to N"`
+		Float   float64  `getopt:"-f=RATE       set frame rate to RATE"`
+		Fancy   bool     `getopt:"--the_real_fancy_and_long_option yes or no"`
+		Verbose bool     `getopt:"-v            be verbose"`
+		List    []string `getopt:"--list=ITEM   add ITEM to list"`
+	}{}
+	usage := `
+Usage: xyzzy [--alpha=LEVEL] [--beta=N] [ -f=RATE] [--list=ITEM] [--the_real_fancy_and_long_option] [ -v] ...
+`[1:]
+	want := `
+--alpha=LEVEL  set the alpha level
+--beta=N       set beta to N
+ -f=RATE       set frame rate to RATE
+--list=ITEM    add ITEM to list
+--the_real_fancy_and_long_option
+               yes or no
+ -v            be verbose
+`[1:]
+	var out bytes.Buffer
+	Help(&out, "xyzzy", "...", opts)
+	got := out.String()
+	if got != usage+want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, usage+want)
+	}
+	out.Reset()
+	Help(&out, "", "", opts)
+	got = out.String()
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+	out.Reset()
+	Help(&out, "command", "args...", nil)
+	got = out.String()
+	want = "Usage: command args...\n"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+
+	out.Reset()
+	Help(&out, "command", "", nil)
+	got = out.String()
+	want = "Usage: command ...\n"
+	if got != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
 	}
 }
