@@ -21,6 +21,7 @@ var opts = struct {
 	Verbose bool          `getopt:"-v               be verbose"`
 	N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
 	Timeout time.Duration `getopt:"--timeout        duration of run"`
+	Opt     string        `getopt:"--opt?=STR       optional STR"`
 	Lazy    string
 }{
 	Name: "gopher",
@@ -33,6 +34,10 @@ func main() {
 		fmt.Printf("Command line parameters: %q\n", args)
 	}
 	fmt.Printf("Name: %s\n", opts.Name)
+	// opts.Opt might will be the empty string if "--opt" was passed.
+	if options.IsSet("opt") {
+		fmt.Printf("Opt: %q\n", opts.Opt)
+	}
 }
 ```
 

@@ -19,6 +19,7 @@ var theOptions = struct {
 	Verbose bool          `getopt:"-v               be verbose"`
 	N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
 	Timeout time.Duration `getopt:"--timeout        duration of run"`
+	Opt     string        `getopt:"--opt?=STR       optional STR"`
 	Lazy    string
 }{
 	Name:  "gopher",
@@ -41,4 +42,5 @@ func main() {
 	fmt.Printf("N: %v\n", theOptions.N)
 	fmt.Printf("Timeout: %v\n", theOptions.Timeout)
 	fmt.Printf("Lazy: %v\n", theOptions.Lazy)
+	fmt.Printf("Opt: %v (set %v)\n", theOptions.Opt, options.IsSet("opt"))
 }

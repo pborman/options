@@ -31,6 +31,7 @@ type theOptions struct {
 	Verbose bool          `getopt:"-v               be verbose"`
 	N       int           `getopt:"-n=NUMBER        set n to NUMBER"`
 	Timeout time.Duration `getopt:"--timeout        duration of run"`
+	Opt     string        `getopt:"--opt?=STR       optional STR"`
 	Lazy    string
 	Unused  int `getopt:"-"`
 }
@@ -42,11 +43,12 @@ var myOptions = theOptions{
 // This is the help we expect from theOptions.  If you change theOptions then
 // you must change this string.  Note that getopt.HelpColumn must be set to 25.
 var theHelp = `
-Usage: program [-v] [-c COUNT] [--lazy value] [-n NUMBER] [--name NAME] [--timeout value] [parameters ...]
+Usage: program [-v] [-c COUNT] [--lazy value] [-n NUMBER] [--name NAME] [--opt STR] [--timeout value] [parameters ...]
  -c, --count=COUNT    number of widgets [42]
      --lazy=value     unspecified
  -n NUMBER            set n to NUMBER
      --name=NAME      name of the widget
+     --opt[=STR]      optional STR
      --timeout=value  duration of run
  -v                   be verbose
 `[1:]
@@ -188,6 +190,7 @@ func TestRegister(t *testing.T) {
 func TestSubRegisterAndParse(t *testing.T) {
 	opts := struct {
 		Value string `getopt:"--the_name=VALUE help"`
+		Opt   string `getopt:"--opt?=VALUE help"`
 	}{
 		Value: "bob",
 	}
@@ -196,6 +199,7 @@ func TestSubRegisterAndParse(t *testing.T) {
 		args  []string
 		err   string
 		value string
+		opt   string
 		out   []string
 	}{{
 		args:  []string{"name"},
@@ -213,12 +217,24 @@ func TestSubRegisterAndParse(t *testing.T) {
 		args:  []string{"name", "--the_name=fred", "a", "b", "c"},
 		value: "fred",
 		out:   []string{"a", "b", "c"},
+	}, {
+		args:  []string{"name", "--opt=jim", "a", "b", "c"},
+		value: "bob",
+		opt:   "jim",
+		out:   []string{"a", "b", "c"},
+	}, {
+		args:  []string{"name", "--opt", "a", "b", "c"},
+		value: "bob",
+		out:   []string{"a", "b", "c"},
 	}} {
 		myopts := opts
 		args, err := SubRegisterAndParse(&myopts, tt.args)
 		if s := check.Error(err, tt.err); s != "" {
 			t.Errorf("%s", s)
 			continue
+		}
+		if tt.opt != myopts.Opt {
+			t.Errorf("%q got opt %q, want %q", tt.args, myopts.Opt, tt.opt)
 		}
 		if tt.value != myopts.Value {
 			t.Errorf("%q got value %q, want %q", tt.args, myopts.Value, tt.value)

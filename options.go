@@ -229,6 +229,13 @@ func Parse() []string {
 	return getopt.Args()
 }
 
+// IsSet returns true if the Option associated with name was seen while parsing
+// the command line arguments. Name should either be a rune (the short name) or
+// a string (the long name).
+func IsSet(name string) bool {
+	return getopt.IsSet(name)
+}
+
 // Validate validates i as a set of options or returns an error.
 //
 // Use Validate to assure that a later call to one of the Register functions
@@ -310,6 +317,9 @@ func register(name string, i interface{}, set *getopt.Set) error {
 		if f, ok := opt.(*Flags); ok {
 			f.Sets = append(f.Sets, Set{Name: name, Set: set})
 			f.opt = set.FlagLong(opt, o.long, o.short, hv...)
+			if o.optional {
+				f.opt.SetOptional()
+			}
 			tag := field.Tag.Get("encoding")
 			if tag == "" {
 				tag = "simple"
@@ -323,6 +333,9 @@ func register(name string, i interface{}, set *getopt.Set) error {
 			f.Decoder = decoder
 		} else {
 			op := set.FlagLong(opt, o.long, o.short, hv...)
+			if o.optional {
+				op.SetOptional()
+			}
 			// Values that are of type bool are flags.
 			if fv.Kind() == reflect.Bool {
 				op.SetFlag()
@@ -388,10 +401,11 @@ func Lookup(i interface{}, option string) interface{} {
 
 // An optTag contains all the information extracted from a getopt tag.
 type optTag struct {
-	long  string
-	short rune
-	param string
-	help  string
+	long     string
+	short    rune
+	param    string
+	help     string
+	optional bool
 }
 
 func (o *optTag) String() string {
@@ -404,7 +418,11 @@ func (o *optTag) String() string {
 		parts = append(parts, "-"+string(o.short))
 	}
 	if o.param != "" {
-		parts = append(parts, "="+o.param)
+		if o.optional {
+			parts = append(parts, "?="+o.param)
+		} else {
+			parts = append(parts, "="+o.param)
+		}
 	}
 	if o.help != "" {
 		parts = append(parts, fmt.Sprintf("%q", o.help))
@@ -423,8 +441,9 @@ func parseTag(tag string) (*optTag, error) {
 	next := tag
 	var o optTag
 	var arg, param string
+	var opt bool
 	for {
-		arg, param, next = nextOption(next)
+		arg, param, next, opt = nextOption(next)
 		if arg == "" || arg == "-" || arg == "--" {
 			if param != "" {
 				// Only happens with "--=FOO" or "-=FOO"
@@ -443,6 +462,7 @@ func parseTag(tag string) (*optTag, error) {
 			if o.param != "" {
 				return nil, fmt.Errorf("getopt tag has multiple parameter names: %q", tag)
 			}
+			o.optional = opt
 			o.param = param
 		}
 		switch argPrefix(arg) {
@@ -470,18 +490,21 @@ func parseTag(tag string) (*optTag, error) {
 // nextOption returns the next option, optional parameter, and the rest of
 // the string parsed from s.  If the option is "" then s does not start with
 // an option (i.e., does not start with a -).
-func nextOption(s string) (option, param, rest string) {
+func nextOption(s string) (option, param, rest string, optional bool) {
 	if s == "" || s[0] != '-' {
-		return "", "", s
+		return "", "", s, false
 	}
 	if x := strings.Index(s, " "); x >= 0 {
 		rest = strings.TrimSpace(s[x:])
 		s = s[:x]
 	}
-	if x := strings.Index(s, "="); x >= 0 {
-		return s[:x], s[x+1:], rest
+	if x := strings.Index(s, "?="); x >= 0 {
+		return s[:x], s[x+2:], rest, true
 	}
-	return s, "", rest
+	if x := strings.Index(s, "="); x >= 0 {
+		return s[:x], s[x+1:], rest, false
+	}
+	return s, "", rest, false
 }
 
 // argPrefix returns the leading dashes in a.
